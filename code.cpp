@@ -57,6 +57,108 @@ static std::vector<long long> sub_vec(const std::vector<long long>& v1, const st
     return result;
 }
 
+// NTT (Number Theoretic Transform) for fast multiplication
+// Using modulus 998244353 = 119 * 2^23 + 1 (a prime)
+static const long long NTT_MOD = 998244353LL;
+static const long long NTT_ROOT = 3LL;  // primitive root
+static const int NTT_MAX_LEN = 23;  // 2^23
+
+static long long ntt_pow(long long base, long long exp, long long mod) {
+    long long result = 1;
+    while (exp > 0) {
+        if (exp & 1) result = (__int128)result * base % mod;
+        base = (__int128)base * base % mod;
+        exp >>= 1;
+    }
+    return result;
+}
+
+static void ntt_prepare_roots(int n, std::vector<long long>& roots, std::vector<long long>& inv_roots) {
+    long long wn = ntt_pow(NTT_ROOT, (NTT_MOD - 1) / n, NTT_MOD);
+    long long inv_wn = ntt_pow(wn, NTT_MOD - 2, NTT_MOD);
+    roots.resize(n);
+    inv_roots.resize(n);
+    roots[0] = 1;
+    inv_roots[0] = 1;
+    for (int i = 1; i < n; i++) {
+        roots[i] = (__int128)roots[i-1] * wn % NTT_MOD;
+        inv_roots[i] = (__int128)inv_roots[i-1] * inv_wn % NTT_MOD;
+    }
+}
+
+static void ntt_transform(std::vector<long long>& a, int n, const std::vector<long long>& roots, bool inverse) {
+    // Bit reversal permutation
+    for (int i = 1, j = 0; i < n; i++) {
+        int bit = n >> 1;
+        for (; j & bit; bit >>= 1) {
+            j ^= bit;
+        }
+        j ^= bit;
+        if (i < j) std::swap(a[i], a[j]);
+    }
+
+    for (int len = 2; len <= n; len <<= 1) {
+        int half = len >> 1;
+        long long wlen = inverse ? roots[half] : roots[half];
+        for (int i = 0; i < n; i += len) {
+            long long w = 1;
+            for (int j = 0; j < half; j++) {
+                long long u = a[i + j];
+                long long v = (__int128)a[i + j + half] * w % NTT_MOD;
+                a[i + j] = (u + v) % NTT_MOD;
+                a[i + j + half] = (u - v + NTT_MOD) % NTT_MOD;
+                w = (__int128)w * wlen % NTT_MOD;
+            }
+        }
+    }
+
+    if (inverse) {
+        long long inv_n = ntt_pow(n, NTT_MOD - 2, NTT_MOD);
+        for (int i = 0; i < n; i++) {
+            a[i] = (__int128)a[i] * inv_n % NTT_MOD;
+        }
+    }
+}
+
+static std::vector<long long> multiply_ntt(const std::vector<long long>& x, const std::vector<long long>& y) {
+    size_t xn = x.size();
+    size_t yn = y.size();
+    if (xn == 0 || yn == 0) return {0};
+
+    int n = 1;
+    while (n < (int)(xn + yn)) n <<= 1;
+
+    std::vector<long long> fx(n, 0), fy(n, 0);
+    for (size_t i = 0; i < xn; i++) fx[i] = x[i] % NTT_MOD;
+    for (size_t i = 0; i < yn; i++) fy[i] = y[i] % NTT_MOD;
+
+    std::vector<long long> roots, inv_roots;
+    ntt_prepare_roots(n, roots, inv_roots);
+
+    ntt_transform(fx, n, roots, false);
+    ntt_transform(fy, n, roots, false);
+
+    for (int i = 0; i < n; i++) {
+        fx[i] = (__int128)fx[i] * fy[i] % NTT_MOD;
+    }
+
+    ntt_transform(fx, n, inv_roots, true);
+
+    // Convert back to base BASE
+    std::vector<long long> result(xn + yn, 0);
+    long long carry = 0;
+    for (size_t i = 0; i < xn + yn; i++) {
+        result[i] += carry;
+        long long val = fx[i];
+        // Compute quotient and remainder when dividing val by NTT_MOD
+        carry = val / NTT_MOD;
+        result[i] += val % NTT_MOD;
+    }
+
+    while (result.size() > 1 && result.back() == 0) result.pop_back();
+    return result;
+}
+
 static std::vector<long long> multiply_simple(const std::vector<long long>& x, const std::vector<long long>& y) {
     size_t xn = x.size();
     size_t yn = y.size();
@@ -75,7 +177,7 @@ static std::vector<long long> multiply_simple(const std::vector<long long>& x, c
     return result;
 }
 
-static std::vector<long long> multiply_karatsuba(const std::vector<long long>& x, const std::vector<long long>& y);
+static std::vector<long long> multiply_ntt(const std::vector<long long>& x, const std::vector<long long>& y);
 
 static std::vector<long long> multiply_karatsuba(const std::vector<long long>& x, const std::vector<long long>& y) {
     size_t xn = x.size();
@@ -85,6 +187,11 @@ static std::vector<long long> multiply_karatsuba(const std::vector<long long>& x
     if (yn == 0 || (xn == 1 && x[0] == 0)) return {0};
     if (xn <= 16 || yn <= 16) {
         return multiply_simple(x, y);
+    }
+
+    // Use NTT for very large numbers
+    if (xn >= 1024 || yn >= 1024) {
+        return multiply_ntt(x, y);
     }
 
     size_t split = xn / 2;
