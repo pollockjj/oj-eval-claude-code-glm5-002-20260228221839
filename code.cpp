@@ -189,11 +189,6 @@ static std::vector<long long> multiply_karatsuba(const std::vector<long long>& x
         return multiply_simple(x, y);
     }
 
-    // Use NTT for very large numbers
-    if (xn >= 1024 || yn >= 1024) {
-        return multiply_ntt(x, y);
-    }
-
     size_t split = xn / 2;
 
     std::vector<long long> x_low(x.begin(), x.begin() + split);
