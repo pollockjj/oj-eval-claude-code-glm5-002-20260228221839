@@ -83,7 +83,7 @@ static std::vector<long long> multiply_karatsuba(const std::vector<long long>& x
 
     if (xn < yn) return multiply_karatsuba(y, x);
     if (yn == 0 || (xn == 1 && x[0] == 0)) return {0};
-    if (xn <= 32 || yn <= 32) {
+    if (xn <= 16 || yn <= 16) {
         return multiply_simple(x, y);
     }
 
