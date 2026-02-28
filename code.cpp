@@ -63,15 +63,13 @@ static std::vector<long long> multiply_simple(const std::vector<long long>& x, c
     if (xn == 0 || yn == 0) return {0};
     std::vector<long long> result(xn + yn, 0);
     for (size_t i = 0; i < xn; i++) {
+        long long carry = 0;
         for (size_t j = 0; j < yn; j++) {
-            result[i + j] += x[i] * y[j];
+            __int128 prod = (__int128)x[i] * y[j] + result[i + j] + carry;
+            carry = prod / BASE;
+            result[i + j] = prod % BASE;
         }
-    }
-    long long carry = 0;
-    for (size_t i = 0; i < result.size(); i++) {
-        result[i] += carry;
-        carry = result[i] / BASE;
-        result[i] %= BASE;
+        result[i + yn] = carry;
     }
     while (result.size() > 1 && result.back() == 0) result.pop_back();
     return result;
@@ -84,41 +82,52 @@ static std::vector<long long> multiply_karatsuba(const std::vector<long long>& x
     size_t yn = y.size();
 
     if (xn < yn) return multiply_karatsuba(y, x);
-    if (yn == 0) return {0};
-    if (xn <= 64) {
+    if (yn == 0 || (xn == 1 && x[0] == 0)) return {0};
+    if (xn <= 32 || yn <= 32) {
         return multiply_simple(x, y);
     }
 
     size_t split = xn / 2;
 
-    std::vector<long long> x_low(x.begin(), x.begin() + std::min(split, xn));
-    std::vector<long long> x_high(x.begin() + std::min(split, xn), x.end());
+    std::vector<long long> x_low(x.begin(), x.begin() + split);
+    std::vector<long long> x_high(x.begin() + split, x.end());
     std::vector<long long> y_low(y.begin(), y.begin() + std::min(split, yn));
     std::vector<long long> y_high(y.begin() + std::min(split, yn), y.end());
 
-    while (!x_low.empty() && x_low.back() == 0) x_low.pop_back();
-    if (x_low.empty()) x_low = {0};
-    while (!y_low.empty() && y_low.back() == 0) y_low.pop_back();
-    if (y_low.empty()) y_low = {0};
+    // Normalize low parts
+    while (x_low.size() > 1 && x_low.back() == 0) x_low.pop_back();
+    while (y_low.size() > 1 && y_low.back() == 0) y_low.pop_back();
 
     auto z0 = multiply_karatsuba(x_low, y_low);
-    auto z2 = multiply_karatsuba(x_high, y_high);
 
+    // z2 can be 0 if x_high or y_high is empty
+    std::vector<long long> z2;
+    if (x_high.empty() || y_high.empty()) {
+        z2 = {0};
+    } else {
+        z2 = multiply_karatsuba(x_high, y_high);
+    }
+
+    // Compute z1 = (x_low + x_high) * (y_low + y_high) - z0 - z2
     auto sum_x = add_vec(x_low, x_high);
     auto sum_y = add_vec(y_low, y_high);
-    auto z1 = multiply_karatsuba(sum_x, sum_y);
-    z1 = sub_vec(z1, z0);
+    auto z1_full = multiply_karatsuba(sum_x, sum_y);
+
+    // z1 = z1_full - z0 - z2 (subtract z0 and z2 from z1_full)
+    // We need to handle potential negative result
+    // Since z1_full >= z0 + z2 mathematically, we just subtract
+    auto z1 = sub_vec(z1_full, z0);
     z1 = sub_vec(z1, z2);
 
-    size_t max_size = z0.size();
-    max_size = std::max(max_size, z1.size() + split);
-    max_size = std::max(max_size, z2.size() + 2 * split);
+    // Compute result = z0 + z1 * B^split + z2 * B^(2*split)
+    size_t max_size = std::max({z0.size(), z1.size() + split, z2.size() + 2 * split});
     std::vector<long long> result(max_size + 1, 0);
 
     for (size_t i = 0; i < z0.size(); i++) result[i] += z0[i];
     for (size_t i = 0; i < z1.size(); i++) result[i + split] += z1[i];
     for (size_t i = 0; i < z2.size(); i++) result[i + 2 * split] += z2[i];
 
+    // Normalize the result
     long long carry = 0;
     for (size_t i = 0; i < result.size(); i++) {
         result[i] += carry;
