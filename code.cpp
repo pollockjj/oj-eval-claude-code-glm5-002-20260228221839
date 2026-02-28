@@ -209,16 +209,17 @@ private:
       }
       while (v.size() > 1 && v.back() == 0) v.pop_back();
 
-      while (u.size() < v.size() + 1) u.push_back(0);
+      // Ensure u has enough space for the division algorithm
+      while (u.size() < dividend.data.size() + 1) u.push_back(0);
 
       size_t vn = v.size();
       long long v1 = v[vn - 1];
       long long v2 = (vn > 1) ? v[vn - 2] : 0;
 
       for (int j = m; j >= 0; j--) {
-          long long uj = (j + vn < u.size()) ? u[j + vn] : 0;
-          long long uj1 = (j + vn - 1 < u.size()) ? u[j + vn - 1] : 0;
-          long long uj2 = (j + vn - 2 < u.size()) ? u[j + vn - 2] : 0;
+          long long uj = ((long long)j + vn < (long long)u.size()) ? u[j + vn] : 0;
+          long long uj1 = ((long long)j + vn - 1 < (long long)u.size()) ? u[j + vn - 1] : 0;
+          long long uj2 = ((long long)j + vn - 2 < (long long)u.size()) ? u[j + vn - 2] : 0;
 
           long long q_hat = (uj * BASE + uj1) / v1;
           long long r_hat = (uj * BASE + uj1) % v1;
@@ -233,8 +234,10 @@ private:
           for (size_t i = 0; i < vn; i++) {
               long long t = u[j + i] - borrow - q_hat * v[i];
               if (t < 0) {
-                  t += BASE;
-                  borrow = 1;
+                  // Need to borrow multiple BASEs
+                  long long num_borrows = (-t + BASE - 1) / BASE;
+                  t += num_borrows * BASE;
+                  borrow = num_borrows;
               } else {
                   borrow = 0;
               }

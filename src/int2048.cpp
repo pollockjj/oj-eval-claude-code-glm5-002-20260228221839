@@ -490,8 +490,10 @@ void int2048::divide(const int2048 &dividend, const int2048 &divisor,
         for (size_t i = 0; i < vn; i++) {
             long long t = u[j + i] - borrow - q_hat * v[i];
             if (t < 0) {
-                t += BASE;
-                borrow = 1;
+                // Need to borrow multiple BASEs
+                long long num_borrows = (-t + BASE - 1) / BASE;
+                t += num_borrows * BASE;
+                borrow = num_borrows;
             } else {
                 borrow = 0;
             }
