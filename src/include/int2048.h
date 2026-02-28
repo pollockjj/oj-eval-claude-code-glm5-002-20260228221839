@@ -19,7 +19,15 @@
 
 namespace sjtu {
 class int2048 {
-  // todo
+private:
+  std::vector<long long> data;
+  bool neg;
+
+  void normalize();
+  int abs_compare(const int2048 &other) const;
+  static void divide(const int2048 &dividend, const int2048 &divisor,
+                     int2048 &quotient, int2048 &remainder);
+
 public:
   // Constructors
   int2048();
